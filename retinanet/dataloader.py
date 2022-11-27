@@ -134,18 +134,18 @@ class CSVDataset(Dataset):
             test_file (string, optional): CSV file with testing annotations
         """
         self.train_file = train_file
-        self.class_list = class_list
+        self.class_list = class_list #class_list明显就是装了class_name,id的
         self.transform = transform
 
         # parse the provided class file
         try:
             with self._open_for_csv(self.class_list) as file:
-                self.classes = self.load_classes(csv.reader(file, delimiter=','))
+                self.classes = self.load_classes(csv.reader(file, delimiter=',')) #class应该对应一个字典
         except ValueError as e:
             raise(ValueError('invalid CSV class file: {}: {}'.format(self.class_list, e)))
 
         self.labels = {}
-        for key, value in self.classes.items():
+        for key, value in self.classes.items(): #字典中每个key,value都组成一个元组返回
             self.labels[value] = key
 
         # csv with img_path, x1, y1, x2, y2, class_name
@@ -266,6 +266,7 @@ class CSVDataset(Dataset):
             if (x1, y1, x2, y2, class_name) == ('', '', '', '', ''):
                 continue
 
+            # 把csv读入进来的string给转换为一个实际的int类型的value
             x1 = self._parse(x1, int, 'line {}: malformed x1: {{}}'.format(line))
             y1 = self._parse(y1, int, 'line {}: malformed y1: {{}}'.format(line))
             x2 = self._parse(x2, int, 'line {}: malformed x2: {{}}'.format(line))
