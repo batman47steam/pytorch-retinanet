@@ -154,8 +154,9 @@ class CSVDataset(Dataset):
                 self.image_data = self._read_annotations(csv.reader(file, delimiter=','), self.classes)
         except ValueError as e:
             raise(ValueError('invalid CSV annotations file: {}: {}'.format(self.train_file, e)))
-        self.image_names = list(self.image_data.keys())
+        self.image_names = list(self.image_data.keys()) #keys对应着imagefile
 
+    # 工具函数，把string给转换为int类型之类的
     def _parse(self, value, function, fmt):
         """
         Parse a string into a value, and format a nice ValueError if it fails.
@@ -179,6 +180,7 @@ class CSVDataset(Dataset):
         else:
             return open(path, 'r', newline='')
 
+    # 读取class所对应的csv file
     def load_classes(self, csv_reader):
         result = {}
 
@@ -196,9 +198,11 @@ class CSVDataset(Dataset):
             result[class_name] = class_id
         return result
 
+    # 没毛病，就是对应csv中所有image
     def __len__(self):
         return len(self.image_names)
 
+    # __getitem__返回一张图片，以及这张图片所对应的标注
     def __getitem__(self, idx):
 
         img = self.load_image(idx)
@@ -282,6 +286,7 @@ class CSVDataset(Dataset):
             if class_name not in classes:
                 raise ValueError('line {}: unknown class name: \'{}\' (classes: {})'.format(line, class_name, classes))
 
+            # 一个img_file其实就是一个图片吧，后面会对应着多个bounding box，所以也就是后面会append很多东西
             result[img_file].append({'x1': x1, 'x2': x2, 'y1': y1, 'y2': y2, 'class': class_name})
         return result
 
@@ -430,13 +435,14 @@ class UnNormalizer(object):
             t.mul_(s).add_(m)
         return tensor
 
-
+# drop_last指的是当数据集中样本个数不能被batch_size整除时候，不能组成完整minibatch的处理方法
+# https://www.cnblogs.com/zi-wang/p/9972102.html
 class AspectRatioBasedSampler(Sampler):
 
     def __init__(self, data_source, batch_size, drop_last):
-        self.data_source = data_source
+        self.data_source = data_source #data_source 总图片数量
         self.batch_size = batch_size
-        self.drop_last = drop_last
+        self.drop_last = drop_last #false
         self.groups = self.group_images()
 
     def __iter__(self):
@@ -444,9 +450,11 @@ class AspectRatioBasedSampler(Sampler):
         for group in self.groups:
             yield group
 
+    # 设置为Ture,比如说batch_size为64，总共就100个样本，那每个epoch就只会使用64个样本
+    # 如果设置为false，会继续正常执行，只是最后的batch_size会小一点
     def __len__(self):
         if self.drop_last:
-            return len(self.data_source) // self.batch_size
+            return len(self.data_source) // self.batch_size #如果有drop_last就是直接去整除
         else:
             return (len(self.data_source) + self.batch_size - 1) // self.batch_size
 
