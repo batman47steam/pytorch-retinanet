@@ -299,13 +299,18 @@ class CSVDataset(Dataset):
     def num_classes(self):
         return max(self.classes.values()) + 1
 
+    # 傻了，image_aspect_ratio implement in this class
+    # return the width and height of each image
     def image_aspect_ratio(self, image_index):
         image = Image.open(self.image_names[image_index])
         return float(image.width) / float(image.height)
 
-
+# 一个batch中的图像统一到相同的尺寸，并且标注的数目也统一
+# collater 接收的数据就是一个batch
 def collater(data):
 
+    # annots shape的第一个维度和batchsize一样，annots in every batch
+    # second dim -> annots for each image
     imgs = [s['img'] for s in data]
     annots = [s['annot'] for s in data]
     scales = [s['scale'] for s in data]
@@ -314,19 +319,26 @@ def collater(data):
     heights = [int(s.shape[1]) for s in imgs]
     batch_size = len(imgs)
 
+    # 获得batch中最大的长和宽
     max_width = np.array(widths).max()
     max_height = np.array(heights).max()
 
+    # 多出来的部分就主动的补充零
     padded_imgs = torch.zeros(batch_size, max_width, max_height, 3)
 
     for i in range(batch_size):
         img = imgs[i]
         padded_imgs[i, :int(img.shape[0]), :int(img.shape[1]), :] = img
 
+    # 取出最大的标注数量
     max_num_annots = max(annot.shape[0] for annot in annots)
     
     if max_num_annots > 0:
 
+        # len(annots)对batch_size
+        # max_num_annots 统一以后的标注数目
+        # 5 -> x1,y1,x2,y2,class
+        # 填充的地方全部填充0，及坐标和class_id
         annot_padded = torch.ones((len(annots), max_num_annots, 5)) * -1
 
         if max_num_annots > 0:
@@ -337,7 +349,7 @@ def collater(data):
     else:
         annot_padded = torch.ones((len(annots), 1, 5)) * -1
 
-
+    # b w h c -> b c w h 把三通道的channel给放到前面来
     padded_imgs = padded_imgs.permute(0, 3, 1, 2)
 
     return {'img': padded_imgs, 'annot': annot_padded, 'scale': scales}
@@ -435,6 +447,7 @@ class UnNormalizer(object):
             t.mul_(s).add_(m)
         return tensor
 
+# 继承了pytorch自带的sample类
 # drop_last指的是当数据集中样本个数不能被batch_size整除时候，不能组成完整minibatch的处理方法
 # https://www.cnblogs.com/zi-wang/p/9972102.html
 class AspectRatioBasedSampler(Sampler):
@@ -458,9 +471,11 @@ class AspectRatioBasedSampler(Sampler):
         else:
             return (len(self.data_source) + self.batch_size - 1) // self.batch_size
 
+    # 先按照高宽比进行排序，然后就近的组成一个batch
     def group_images(self):
         # determine the order of the images
         order = list(range(len(self.data_source)))
+        # 根据样本中每张图片width/height的比例进行排序
         order.sort(key=lambda x: self.data_source.image_aspect_ratio(x))
 
         # divide into groups, one group = one batch

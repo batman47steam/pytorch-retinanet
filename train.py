@@ -106,6 +106,9 @@ def main(args=None):
 
     loss_hist = collections.deque(maxlen=500)
 
+    # BN是去计算当前batch的均值和方差
+    # 但是这个代码里面目前设置的batchsize就是2，在这么小的batch里面其计算均值和方差没太大意义
+    # 还不如直接不使用，所以freeze_bn
     retinanet.train()
     retinanet.module.freeze_bn()
 
@@ -127,6 +130,7 @@ def main(args=None):
                 else:
                     classification_loss, regression_loss = retinanet([data['img'].float(), data['annot']])
                     
+                # 一个batch中计算出来的loss求平均值
                 classification_loss = classification_loss.mean()
                 regression_loss = regression_loss.mean()
 
