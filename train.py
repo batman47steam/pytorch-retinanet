@@ -19,7 +19,7 @@ assert torch.__version__.split('.')[0] == '1'
 
 print('CUDA available: {}'.format(torch.cuda.is_available()))
 
-
+# 读入了classees.csv以后，整个网络好像都没有其他地方需要改的？
 def main(args=None):
     parser = argparse.ArgumentParser(description='Simple training script for training a RetinaNet network.')
 
@@ -116,6 +116,9 @@ def main(args=None):
 
     for epoch_num in range(parser.epochs):
 
+        # 这个freeze_bn其实就是把BN设置为了eval的模式
+        # BN在train的时候是每次都要去根据batch里面的数据去进行计算的
+        # eval的时候应该是直接用之前的
         retinanet.train()
         retinanet.module.freeze_bn()
 
@@ -123,6 +126,8 @@ def main(args=None):
 
         for iter_num, data in enumerate(dataloader_train):
             try:
+                # 每个batch都需要把之前计算的梯度给清零，比如说如果你两个batch的梯度都没清零，实际上就是相当于batchsize变大了
+                # https://blog.csdn.net/buziran/article/details/107917160
                 optimizer.zero_grad()
 
                 if torch.cuda.is_available():
@@ -139,10 +144,12 @@ def main(args=None):
                 if bool(loss == 0):
                     continue
 
+                # 反向传播
                 loss.backward()
 
                 torch.nn.utils.clip_grad_norm_(retinanet.parameters(), 0.1)
 
+                # 优化器优化
                 optimizer.step()
 
                 loss_hist.append(float(loss))
@@ -175,6 +182,7 @@ def main(args=None):
 
         torch.save(retinanet.module, '{}_retinanet_{}.pt'.format(parser.dataset, epoch_num))
 
+    # 只是调整成eval模式
     retinanet.eval()
 
     torch.save(retinanet, 'model_final.pt')

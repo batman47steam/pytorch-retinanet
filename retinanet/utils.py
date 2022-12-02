@@ -9,8 +9,15 @@ def conv3x3(in_planes, out_planes, stride=1):
                      padding=1, bias=False)
 
 
+"""
+在resnet18和resnet34中，都使用的是BasicBlock
+但是在更加深层的resnent中都使用的是bottleneck
+https://www.zhihu.com/question/413586557/answer/1510955213
+"""
+
+# 感觉就是一个标准的带残差连接的残差快
 class BasicBlock(nn.Module):
-    expansion = 1
+    expansion = 1 # BasicBlock好像是输出的channel的数目不会变
 
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(BasicBlock, self).__init__()
@@ -42,7 +49,7 @@ class BasicBlock(nn.Module):
 
 
 class Bottleneck(nn.Module):
-    expansion = 4
+    expansion = 4 # 更深的resnet，输出的通道数会翻四倍
 
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super(Bottleneck, self).__init__()

@@ -31,6 +31,8 @@ class FocalLoss(nn.Module):
         classification_losses = []
         regression_losses = []
 
+        # 这里为什么只取0啊
+        # anchor的shape是（1，111330，4）
         anchor = anchors[0, :, :]
 
         anchor_widths  = anchor[:, 2] - anchor[:, 0]
@@ -44,7 +46,7 @@ class FocalLoss(nn.Module):
             regression = regressions[j, :, :]
 
             bbox_annotation = annotations[j, :, :]
-            bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]
+            bbox_annotation = bbox_annotation[bbox_annotation[:, 4] != -1]  #-1是因为之前把annotation给统一的进行填充了
 
             classification = torch.clamp(classification, 1e-4, 1.0 - 1e-4)
 
@@ -79,8 +81,11 @@ class FocalLoss(nn.Module):
 
                 continue
 
+            # 所有的anchors去和图片中标注的ground truth bounding box去算IOU
+            # 也就是每个anchor分别和标注去算一次IOU
             IoU = calc_iou(anchors[0, :, :], bbox_annotation[:, :4]) # num_anchors x num_annotations
 
+            # dim=1也就是说每个anchor和哪一个标注的IOU最大
             IoU_max, IoU_argmax = torch.max(IoU, dim=1) # num_anchors x 1
 
             #import pdb
@@ -92,16 +97,18 @@ class FocalLoss(nn.Module):
             if torch.cuda.is_available():
                 targets = targets.cuda()
 
+            # 逐个去比较IoU_max是否小于0.4
             targets[torch.lt(IoU_max, 0.4), :] = 0
 
+            # 逐个去比较那些IOUmax大于0.5作为positive的
             positive_indices = torch.ge(IoU_max, 0.5)
 
             num_positive_anchors = positive_indices.sum()
 
-            assigned_annotations = bbox_annotation[IoU_argmax, :]
+            assigned_annotations = bbox_annotation[IoU_argmax, :] #取出和每个anchorbox的IOU最大的那个annotation
 
             targets[positive_indices, :] = 0
-            targets[positive_indices, assigned_annotations[positive_indices, 4].long()] = 1
+            targets[positive_indices, assigned_annotations[positive_indices, 4].long()] = 1 # [positive_indices,4]应该对应的是类别，class
 
             if torch.cuda.is_available():
                 alpha_factor = torch.ones(targets.shape).cuda() * alpha
@@ -126,15 +133,15 @@ class FocalLoss(nn.Module):
 
             # compute the loss for regression
 
-            if positive_indices.sum() > 0:
+            if positive_indices.sum() > 0: # 说明对于正样本才会去计算回归损失
                 assigned_annotations = assigned_annotations[positive_indices, :]
 
-                anchor_widths_pi = anchor_widths[positive_indices]
+                anchor_widths_pi = anchor_widths[positive_indices] #符合IoU阈值要求的anchor box
                 anchor_heights_pi = anchor_heights[positive_indices]
                 anchor_ctr_x_pi = anchor_ctr_x[positive_indices]
                 anchor_ctr_y_pi = anchor_ctr_y[positive_indices]
 
-                gt_widths  = assigned_annotations[:, 2] - assigned_annotations[:, 0]
+                gt_widths  = assigned_annotations[:, 2] - assigned_annotations[:, 0] #groud-truth
                 gt_heights = assigned_annotations[:, 3] - assigned_annotations[:, 1]
                 gt_ctr_x   = assigned_annotations[:, 0] + 0.5 * gt_widths
                 gt_ctr_y   = assigned_annotations[:, 1] + 0.5 * gt_heights
@@ -143,7 +150,7 @@ class FocalLoss(nn.Module):
                 gt_widths  = torch.clamp(gt_widths, min=1)
                 gt_heights = torch.clamp(gt_heights, min=1)
 
-                targets_dx = (gt_ctr_x - anchor_ctr_x_pi) / anchor_widths_pi
+                targets_dx = (gt_ctr_x - anchor_ctr_x_pi) / anchor_widths_pi # 反向计算出回归头应该预测的结果
                 targets_dy = (gt_ctr_y - anchor_ctr_y_pi) / anchor_heights_pi
                 targets_dw = torch.log(gt_widths / anchor_widths_pi)
                 targets_dh = torch.log(gt_heights / anchor_heights_pi)
@@ -166,7 +173,7 @@ class FocalLoss(nn.Module):
                     regression_diff - 0.5 / 9.0
                 )
                 regression_losses.append(regression_loss.mean())
-            else:
+            else: # 如果没有正样本是没有回归损失的
                 if torch.cuda.is_available():
                     regression_losses.append(torch.tensor(0).float().cuda())
                 else:
